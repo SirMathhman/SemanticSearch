@@ -92,21 +92,29 @@ export function createStore(
     docs: { key: string; text: string }[],
   ): Promise<number[]> {
     if (docs.length === 0) return [];
-    const ids = docs.map((d) => {
-      const existing = index.entries().find((e) => e.key === d.key);
-      return existing ? existing.id : nextId++;
+    const existing = new Map(index.entries().map((e) => [e.key, e]));
+    // Only re-embed documents whose text actually changed; unchanged entries
+    // keep their stored vectors. This makes watcher re-indexes cheap.
+    const changed = docs.filter((d) => {
+      const e = existing.get(d.key);
+      return !e || e.text !== d.text;
     });
-    const vectors = await embedder.embed(docs.map((d) => d.text));
-    docs.forEach((d, i) =>
-      index.upsert({
-        key: d.key,
-        id: ids[i],
-        text: d.text,
-        vector: vectors[i],
-      }),
+    const ids = new Map(
+      docs.map((d) => [d.key, existing.get(d.key)?.id ?? nextId++]),
     );
-    if (filePath) saveCorpus(filePath, { nextId, docs: index.entries() });
-    return ids;
+    if (changed.length > 0) {
+      const vectors = await embedder.embed(changed.map((d) => d.text));
+      changed.forEach((d, i) =>
+        index.upsert({
+          key: d.key,
+          id: ids.get(d.key)!,
+          text: d.text,
+          vector: vectors[i],
+        }),
+      );
+      if (filePath) saveCorpus(filePath, { nextId, docs: index.entries() });
+    }
+    return docs.map((d) => ids.get(d.key)!);
   }
 
   return {
