@@ -1,3 +1,4 @@
 {
-  "corpusPath": "corpus.json"
+  "corpusPath": "corpus.json",
+  "directories": ["src"]
 }

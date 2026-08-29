@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { loadConfig } from "./search/config.js";
@@ -11,13 +12,15 @@ import { watchDirectory } from "./search/watcher.js";
  *
  * Loads the server config (creating `semantic-search.json` in the working
  * directory on first start) and uses its corpus path for persistence.
+ * Each configured directory is indexed and watched at startup; a directory
+ * that does not exist is skipped with a warning on stderr.
  * This is the single place that turns a failed config or corpus load into
  * a process-level failure: the structured error is logged to stderr and the
  * process exits with a non-zero code.
  *
  * @returns A configured (not yet connected) MCP server.
  */
-export function createServer(): McpServer {
+export async function createServer(): Promise<McpServer> {
   const configResult = loadConfig();
   if (!configResult.ok) {
     const e = configResult.error;
@@ -33,6 +36,18 @@ export function createServer(): McpServer {
     process.exit(1);
   }
   const store = storeResult.store;
+  for (const directory of configResult.config.directories) {
+    if (!existsSync(directory)) {
+      console.error(`Configured directory not found, skipping: ${directory}`);
+      continue;
+    }
+    const docs = extractDirectory(directory);
+    await store.reindexDirectory(directory, docs);
+    // Keep the corpus in sync with future edits to this directory.
+    watchDirectory(directory, () =>
+      store.reindexDirectory(directory, extractDirectory(directory)),
+    );
+  }
   const server = new McpServer({
     name: "semantic-search",
     version: "0.1.0",

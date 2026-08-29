@@ -40,15 +40,21 @@ test("loadConfig is idempotent: an existing file is not rewritten", () => {
   assert.equal(readFileSync(path.join(dir, CONFIG_FILE_NAME), "utf8"), before);
 });
 
-test("loadConfig reads a user-edited corpusPath", () => {
+test("loadConfig reads a user-edited corpusPath and directories", () => {
   writeFileSync(
     path.join(dir, CONFIG_FILE_NAME),
-    JSON.stringify({ corpusPath: "my-corpus.json" }),
+    JSON.stringify({
+      corpusPath: "my-corpus.json",
+      directories: ["src", "lib"],
+    }),
   );
   const result = loadConfig();
   assert.equal(result.ok, true);
   if (!result.ok) throw new Error("expected ok");
-  assert.deepEqual(result.config, { corpusPath: "my-corpus.json" });
+  assert.deepEqual(result.config, {
+    corpusPath: "my-corpus.json",
+    directories: ["src", "lib"],
+  });
 });
 
 test("loadConfig returns an invalid-json error on invalid JSON", () => {
@@ -73,7 +79,29 @@ test("loadConfig returns an invalid-shape error when corpusPath is missing", () 
 test("loadConfig returns an invalid-shape error when corpusPath is not a string", () => {
   writeFileSync(
     path.join(dir, CONFIG_FILE_NAME),
-    JSON.stringify({ corpusPath: 42 }),
+    JSON.stringify({ corpusPath: 42, directories: [] }),
+  );
+  const result = loadConfig();
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error("expected error");
+  assert.equal(result.error.kind, "invalid-shape");
+});
+
+test("loadConfig returns an invalid-shape error when directories is missing", () => {
+  writeFileSync(
+    path.join(dir, CONFIG_FILE_NAME),
+    JSON.stringify({ corpusPath: "corpus.json" }),
+  );
+  const result = loadConfig();
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error("expected error");
+  assert.equal(result.error.kind, "invalid-shape");
+});
+
+test("loadConfig returns an invalid-shape error when directories is not an array of strings", () => {
+  writeFileSync(
+    path.join(dir, CONFIG_FILE_NAME),
+    JSON.stringify({ corpusPath: "corpus.json", directories: ["src", 42] }),
   );
   const result = loadConfig();
   assert.equal(result.ok, false);

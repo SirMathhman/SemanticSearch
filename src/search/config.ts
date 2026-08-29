@@ -13,6 +13,10 @@ export interface Config {
    * Path to the JSON file that persists the corpus.
    */
   corpusPath: string;
+  /**
+   * Directories to index at startup (and keep watching).
+   */
+  directories: string[];
 }
 
 /** The kind of config failure. */
@@ -41,7 +45,49 @@ export type ConfigResult =
  * @returns A fresh default config.
  */
 export function defaultConfig(): Config {
-  return { corpusPath: DEFAULT_CORPUS_PATH };
+  return { corpusPath: DEFAULT_CORPUS_PATH, directories: [] };
+}
+
+/**
+ * Validate the parsed config shape.
+ *
+ * @param file - The parsed JSON value.
+ * @param where - Path of the config file, for error reporting.
+ * @returns The validated config, or a structured error describing the first shape problem.
+ */
+function validateShape(
+  file: Partial<Config>,
+  where: string,
+): { ok: true; config: Config } | { ok: false; error: ConfigError } {
+  if (typeof file?.corpusPath !== "string" || file.corpusPath.length === 0) {
+    return {
+      ok: false,
+      error: {
+        kind: "invalid-shape",
+        where,
+        why: 'the config is missing a non-empty "corpusPath" string',
+        fix: 'add "corpusPath" (a file path), or delete the file to regenerate it',
+      },
+    };
+  }
+  if (
+    !Array.isArray(file.directories) ||
+    file.directories.some((d) => typeof d !== "string" || d.length === 0)
+  ) {
+    return {
+      ok: false,
+      error: {
+        kind: "invalid-shape",
+        where,
+        why: 'the config is missing a "directories" array of non-empty strings',
+        fix: 'set "directories" to a list of directory paths, or delete the file to regenerate it',
+      },
+    };
+  }
+  return {
+    ok: true,
+    config: { corpusPath: file.corpusPath, directories: file.directories },
+  };
 }
 
 /**
@@ -94,17 +140,5 @@ export function loadConfig(): ConfigResult {
     };
   }
 
-  const file = parsed as Partial<Config>;
-  if (typeof file?.corpusPath !== "string" || file.corpusPath.length === 0) {
-    return {
-      ok: false,
-      error: {
-        kind: "invalid-shape",
-        where: filePath,
-        why: 'the config is missing a non-empty "corpusPath" string',
-        fix: 'add "corpusPath" (a file path), or delete the file to regenerate it',
-      },
-    };
-  }
-  return { ok: true, config: { corpusPath: file.corpusPath } };
+  return validateShape(parsed as Partial<Config>, filePath);
 }
