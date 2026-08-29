@@ -19,13 +19,23 @@ interface NamedDecl {
 /**
  * List TypeScript files under a directory, recursively.
  *
+ * A subdirectory that vanishes or is unreadable mid-walk is skipped rather
+ * than thrown on: the walk runs under the file watcher, where races are
+ * normal.
+ *
  * @param root - The directory to walk.
  * @returns Relative file paths (forward slashes), skipping node_modules, dist, and dot-directories.
  */
 export function listTypeScriptFiles(root: string): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
       if (
         entry.name === "node_modules" ||
         entry.name === "dist" ||
@@ -72,20 +82,65 @@ export function extractSymbols(label: string, source: string): SymbolDoc[] {
   return docs;
 }
 
+/** The kind of extraction failure. */
+export type ExtractErrorKind = "unreadable";
+
+/** Structured error for a failed directory extraction. */
+export interface ExtractError {
+  /** What kind of failure this is. */
+  kind: ExtractErrorKind;
+  /** Where: the file or directory involved. */
+  where: string;
+  /** Why this is an error. */
+  why: string;
+  /** What to do to make the error go away. */
+  fix: string;
+}
+
+/** Result of extracting symbol documents from a directory. */
+export type ExtractResult =
+  | { ok: true; docs: SymbolDoc[] }
+  | { ok: false; error: ExtractError };
+
 /**
  * Extract symbol documents for every TypeScript file under a directory.
  * Keys use absolute, forward-slash paths so entries are globally unique and
  * can be scoped to their source directory.
  *
+ * A file that vanishes or is unreadable mid-walk is skipped rather than
+ * thrown on: the walk runs under the file watcher, where races are normal.
+ * Only a directory that cannot be listed at all is a hard error.
+ *
  * @param directory - The directory to walk.
- * @returns All symbol documents, in file order.
+ * @returns All symbol documents in file order, or a structured error when the directory cannot be listed.
  */
-export function extractDirectory(directory: string): SymbolDoc[] {
-  const files = listTypeScriptFiles(directory);
-  return files.flatMap((rel) => {
+export function extractDirectory(directory: string): ExtractResult {
+  let files: string[];
+  try {
+    files = listTypeScriptFiles(directory);
+  } catch (err) {
+    return {
+      ok: false,
+      error: {
+        kind: "unreadable",
+        where: directory,
+        why: `the directory could not be listed: ${String(err)}`,
+        fix: "check the path and permissions, or remove it from the config",
+      },
+    };
+  }
+  const docs: SymbolDoc[] = [];
+  for (const rel of files) {
     const label = toKeyPath(path.join(directory, rel));
-    return extractSymbols(label, readFileSync(label, "utf8"));
-  });
+    let source: string;
+    try {
+      source = readFileSync(label, "utf8");
+    } catch {
+      continue;
+    }
+    docs.push(...extractSymbols(label, source));
+  }
+  return { ok: true, docs };
 }
 
 /**
