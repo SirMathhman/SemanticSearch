@@ -20,8 +20,10 @@ after(() => {
 });
 
 test("loadConfig creates the config file with defaults when missing", () => {
-  const config = loadConfig();
-  assert.deepEqual(config, defaultConfig());
+  const result = loadConfig();
+  assert.equal(result.ok, true);
+  if (!result.ok) throw new Error("expected ok");
+  assert.deepEqual(result.config, defaultConfig());
   const onDisk = JSON.parse(
     readFileSync(path.join(dir, CONFIG_FILE_NAME), "utf8"),
   );
@@ -31,8 +33,10 @@ test("loadConfig creates the config file with defaults when missing", () => {
 test("loadConfig is idempotent: an existing file is not rewritten", () => {
   loadConfig();
   const before = readFileSync(path.join(dir, CONFIG_FILE_NAME), "utf8");
-  const config = loadConfig();
-  assert.deepEqual(config, defaultConfig());
+  const result = loadConfig();
+  assert.equal(result.ok, true);
+  if (!result.ok) throw new Error("expected ok");
+  assert.deepEqual(result.config, defaultConfig());
   assert.equal(readFileSync(path.join(dir, CONFIG_FILE_NAME), "utf8"), before);
 });
 
@@ -41,23 +45,38 @@ test("loadConfig reads a user-edited corpusPath", () => {
     path.join(dir, CONFIG_FILE_NAME),
     JSON.stringify({ corpusPath: "my-corpus.json" }),
   );
-  assert.deepEqual(loadConfig(), { corpusPath: "my-corpus.json" });
+  const result = loadConfig();
+  assert.equal(result.ok, true);
+  if (!result.ok) throw new Error("expected ok");
+  assert.deepEqual(result.config, { corpusPath: "my-corpus.json" });
 });
 
-test("loadConfig throws on invalid JSON", () => {
+test("loadConfig returns an invalid-json error on invalid JSON", () => {
   writeFileSync(path.join(dir, CONFIG_FILE_NAME), "{ not json");
-  assert.throws(() => loadConfig(), /Invalid JSON in config/);
+  const result = loadConfig();
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error("expected error");
+  assert.equal(result.error.kind, "invalid-json");
+  assert.ok(result.error.where.includes(CONFIG_FILE_NAME));
+  assert.ok(result.error.why.length > 0);
+  assert.ok(result.error.fix.length > 0);
 });
 
-test("loadConfig throws when corpusPath is missing", () => {
+test("loadConfig returns an invalid-shape error when corpusPath is missing", () => {
   writeFileSync(path.join(dir, CONFIG_FILE_NAME), JSON.stringify({}));
-  assert.throws(() => loadConfig(), /missing a non-empty "corpusPath"/);
+  const result = loadConfig();
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error("expected error");
+  assert.equal(result.error.kind, "invalid-shape");
 });
 
-test("loadConfig throws when corpusPath is not a string", () => {
+test("loadConfig returns an invalid-shape error when corpusPath is not a string", () => {
   writeFileSync(
     path.join(dir, CONFIG_FILE_NAME),
     JSON.stringify({ corpusPath: 42 }),
   );
-  assert.throws(() => loadConfig(), /missing a non-empty "corpusPath"/);
+  const result = loadConfig();
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error("expected error");
+  assert.equal(result.error.kind, "invalid-shape");
 });

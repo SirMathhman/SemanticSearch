@@ -11,13 +11,27 @@ import { watchDirectory } from "./search/watcher.js";
  *
  * Loads the server config (creating `semantic-search.json` in the working
  * directory on first start) and uses its corpus path for persistence.
+ * This is the single place that turns a failed config or corpus load into
+ * a process-level failure: the structured error is logged to stderr and the
+ * process exits with a non-zero code.
  *
  * @returns A configured (not yet connected) MCP server.
- * @throws When the config file exists but is unreadable or malformed.
  */
 export function createServer(): McpServer {
-  const config = loadConfig();
-  const store = createStore(localEmbedder, { filePath: config.corpusPath });
+  const configResult = loadConfig();
+  if (!configResult.ok) {
+    const e = configResult.error;
+    console.error(`Config error at ${e.where}: ${e.why}. ${e.fix}`);
+    process.exit(1);
+  }
+  const storeResult = createStore(localEmbedder, {
+    filePath: configResult.config.corpusPath,
+  });
+  if (!storeResult.ok) {
+    console.error(storeResult.error);
+    process.exit(1);
+  }
+  const store = storeResult.store;
   const server = new McpServer({
     name: "semantic-search",
     version: "0.1.0",

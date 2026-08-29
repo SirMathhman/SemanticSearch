@@ -63,18 +63,23 @@ export interface Store {
   search(query: string, limit: number): Promise<SearchResult[]>;
 }
 
+/** Result of creating a store. */
+export type CreateStoreResult =
+  | { ok: true; store: Store }
+  | { ok: false; error: string };
+
 /**
  * Create a semantic search store, optionally persisted to a JSON file.
  *
  * @param embedder - The embedder used for documents and queries.
  * @param options - Store options (e.g. a persistence file path).
- * @returns A store with addDocument and search operations.
- * @throws When a configured corpus file exists but cannot be loaded.
+ * @returns A store with addDocument and search operations, or a structured
+ * error when a configured corpus file exists but cannot be loaded.
  */
 export function createStore(
   embedder: Embedder,
   options: StoreOptions = {},
-): Store {
+): CreateStoreResult {
   const { filePath } = options;
   const index = createIndex();
   let nextId = 1;
@@ -82,7 +87,10 @@ export function createStore(
   if (filePath) {
     const loaded = loadCorpus(filePath);
     if (!loaded.ok) {
-      throw new Error(`Cannot load corpus at ${filePath}: ${loaded.error}`);
+      return {
+        ok: false,
+        error: `Cannot load corpus at ${filePath}: ${loaded.error}`,
+      };
     }
     for (const doc of loaded.corpus.docs) index.insert(doc);
     nextId = loaded.corpus.nextId;
@@ -118,40 +126,43 @@ export function createStore(
   }
 
   return {
-    async addDocument(text: string): Promise<number> {
-      // Key off the next id without consuming it; upsertMany assigns it.
-      return (await upsertMany([{ key: `doc-${nextId}`, text }]))[0];
-    },
+    ok: true as const,
+    store: {
+      async addDocument(text: string): Promise<number> {
+        // Key off the next id without consuming it; upsertMany assigns it.
+        return (await upsertMany([{ key: `doc-${nextId}`, text }]))[0];
+      },
 
-    async upsertDocument(key: string, text: string): Promise<number> {
-      return (await upsertMany([{ key, text }]))[0];
-    },
+      async upsertDocument(key: string, text: string): Promise<number> {
+        return (await upsertMany([{ key, text }]))[0];
+      },
 
-    async upsertDocuments(
-      docs: { key: string; text: string }[],
-    ): Promise<number[]> {
-      return upsertMany(docs);
-    },
+      async upsertDocuments(
+        docs: { key: string; text: string }[],
+      ): Promise<number[]> {
+        return upsertMany(docs);
+      },
 
-    async reindexDirectory(
-      directory: string,
-      docs: { key: string; text: string }[],
-    ): Promise<number[]> {
-      // Drop stale entries: previously indexed keys under this directory
-      // that are no longer present in the fresh extraction.
-      const prefix = normalizeDir(directory);
-      const current = new Set(docs.map((d) => d.key));
-      for (const e of index.entries()) {
-        if (e.key.startsWith(prefix) && !current.has(e.key)) {
-          index.remove(e.key);
+      async reindexDirectory(
+        directory: string,
+        docs: { key: string; text: string }[],
+      ): Promise<number[]> {
+        // Drop stale entries: previously indexed keys under this directory
+        // that are no longer present in the fresh extraction.
+        const prefix = normalizeDir(directory);
+        const current = new Set(docs.map((d) => d.key));
+        for (const e of index.entries()) {
+          if (e.key.startsWith(prefix) && !current.has(e.key)) {
+            index.remove(e.key);
+          }
         }
-      }
-      return upsertMany(docs);
-    },
+        return upsertMany(docs);
+      },
 
-    async search(query: string, limit: number): Promise<SearchResult[]> {
-      const [q] = await embedder.embed([query]);
-      return index.search(q, limit);
+      async search(query: string, limit: number): Promise<SearchResult[]> {
+        const [q] = await embedder.embed([query]);
+        return index.search(q, limit);
+      },
     },
   };
 }
