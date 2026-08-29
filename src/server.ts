@@ -2,10 +2,11 @@ import { existsSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { loadConfig } from "./search/config.js";
-import { extractDirectory, type ExtractError } from "./search/extract.js";
+import { indexDirectories } from "./search/corpus.js";
+import { extractDirectory } from "./search/extract.js";
 import { type SearchResult } from "./search/index.js";
 import { localEmbedder } from "./search/local-embedder.js";
-import { createStore, type Store } from "./search/query.js";
+import { createStore } from "./search/query.js";
 import { watchDirectory } from "./search/watcher.js";
 
 /**
@@ -37,16 +38,18 @@ export async function createServer(): Promise<McpServer> {
     process.exit(1);
   }
   const store = storeResult.store;
+  await indexDirectories(configResult.config, store);
   for (const directory of configResult.config.directories) {
-    if (!existsSync(directory)) {
-      console.error(`Configured directory not found, skipping: ${directory}`);
-      continue;
-    }
-    const result = await indexAndWatch(directory, store);
-    if (!result.ok) {
-      const e = result.error;
-      console.error(`Extraction error at ${e.where}: ${e.why}. ${e.fix}`);
-    }
+    if (!existsSync(directory)) continue;
+    watchDirectory(directory, () => {
+      const r = extractDirectory(directory);
+      if (r.ok) {
+        void store.reindexDirectory(directory, r.docs);
+      } else {
+        const e = r.error;
+        console.error(`Extraction error at ${e.where}: ${e.why}. ${e.fix}`);
+      }
+    });
   }
   const server = new McpServer({
     name: "semantic-search",
@@ -95,39 +98,6 @@ export async function createServer(): Promise<McpServer> {
   );
 
   return server;
-}
-
-/** Result of indexing a directory and starting its watcher. */
-type IndexAndWatchResult =
-  | { ok: true; count: number }
-  | { ok: false; error: ExtractError };
-
-/**
- * Extract the symbols under a directory, reindex them into the store, and
- * start watching the directory for changes.
- *
- * @param directory - The directory to index and watch.
- * @param store - The store to reindex into.
- * @returns Whether the directory was indexed, with a count or a structured error.
- */
-async function indexAndWatch(
-  directory: string,
-  store: Store,
-): Promise<IndexAndWatchResult> {
-  const extracted = extractDirectory(directory);
-  if (!extracted.ok) return { ok: false, error: extracted.error };
-  await store.reindexDirectory(directory, extracted.docs);
-  // Keep the corpus in sync with future edits to this directory.
-  watchDirectory(directory, () => {
-    const r = extractDirectory(directory);
-    if (r.ok) {
-      void store.reindexDirectory(directory, r.docs);
-    } else {
-      const e = r.error;
-      console.error(`Extraction error at ${e.where}: ${e.why}. ${e.fix}`);
-    }
-  });
-  return { ok: true, count: extracted.docs.length };
 }
 
 /**
