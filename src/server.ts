@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { localEmbedder } from "./search/local-embedder.js";
-import { createStore } from "./search/store.js";
+import { createStore } from "./search/query.js";
 
 /** Default corpus file location (override with SEMANTIC_SEARCH_CORPUS). */
 const CORPUS_PATH = process.env.SEMANTIC_SEARCH_CORPUS ?? "corpus.json";
