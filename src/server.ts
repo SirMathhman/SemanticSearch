@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { addDocument, search } from "./search/store.js";
+import { localEmbedder } from "./search/local-embedder.js";
+import { createStore } from "./search/store.js";
 
 /**
  * Build the MCP server with its tools registered.
@@ -8,6 +9,7 @@ import { addDocument, search } from "./search/store.js";
  * @returns A configured (not yet connected) MCP server.
  */
 export function createServer(): McpServer {
+  const store = createStore(localEmbedder);
   const server = new McpServer({
     name: "semantic-search",
     version: "0.1.0",
@@ -30,7 +32,7 @@ export function createServer(): McpServer {
       },
     },
     async ({ query, limit }) => {
-      const results = await search(query, limit);
+      const results = await store.search(query, limit);
       const text =
         results.length === 0
           ? "No documents in the corpus yet."
@@ -51,7 +53,7 @@ export function createServer(): McpServer {
       },
     },
     async ({ text }) => {
-      const id = await addDocument(text);
+      const id = await store.addDocument(text);
       return { content: [{ type: "text", text: `Added document ${id}` }] };
     },
   );
