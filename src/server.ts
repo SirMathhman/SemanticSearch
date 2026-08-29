@@ -95,42 +95,6 @@ export async function createServer(): Promise<McpServer> {
     },
   );
 
-  server.registerTool(
-    "index_directory",
-    {
-      title: "Index directory",
-      description:
-        "Extract top-level symbols from every .ts file under a directory and upsert them into the corpus. Re-running is idempotent: symbols are keyed by path and name, so edits replace existing entries instead of duplicating them.",
-      inputSchema: {
-        directory: z
-          .string()
-          .describe("Absolute path to the directory to index"),
-      },
-    },
-    async ({ directory }) => {
-      const result = await indexAndWatch(directory, store);
-      if (!result.ok) {
-        const e = result.error;
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Extraction failed at ${e.where}: ${e.why}. ${e.fix}`,
-            },
-          ],
-        };
-      }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Indexed ${result.count} symbols under ${directory}. Watching for changes.`,
-          },
-        ],
-      };
-    },
-  );
-
   return server;
 }
 
@@ -141,9 +105,7 @@ type IndexAndWatchResult =
 
 /**
  * Extract the symbols under a directory, reindex them into the store, and
- * start watching the directory for changes. This is the single wiring of
- * extraction, store, and watcher, shared by startup and the index_directory
- * tool.
+ * start watching the directory for changes.
  *
  * @param directory - The directory to index and watch.
  * @param store - The store to reindex into.
