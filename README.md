@@ -82,12 +82,14 @@ Set `cwd` to the project you want searched — the config file and corpus live i
 
 Releases are published to npm as `@sirmathhman/semantic-search` by a GitHub Actions workflow (`.github/workflows/publish.yml`) that runs on `v*` tags: install → test → build → `npm publish --provenance`.
 
-One-time setup: create an npm **Automation** token (read-only publish access to the `@sirmathhman` scope) and store it in the repo's `NPM_TOKEN` secret. Then:
+One-time setup: create an npm **granular access token** with **read and write** access to the `@sirmathhman/semantic-search` package (legacy/Automation tokens were removed in Nov 2025) and store it in the repo's `NPM_TOKEN` secret. Then:
 
 ```sh
 git tag v0.1.0
 git push origin v0.1.0
 ```
+
+Alternatively, use [npm trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC) to publish with no long-lived token: add `permissions: id-token: write` to the workflow and authorize `publish.yml` as a trusted publisher on npmjs.com.
 
 ## Architecture
 
