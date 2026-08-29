@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "semantic-search": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": ["start"]
+    }
+  }
+}
