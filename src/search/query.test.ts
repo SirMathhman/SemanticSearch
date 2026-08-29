@@ -58,15 +58,6 @@ test("search returns file and line for documents that carry them", async () => {
   assert.equal(results[0].line, 3);
 });
 
-test("search omits file and line for ad-hoc documents", async () => {
-  const { store } = await makeStore();
-  await store.addDocument("a plain note");
-  const results = await store.search("a plain note", 5);
-  assert.equal(results.length, 1);
-  assert.equal(results[0].file, undefined);
-  assert.equal(results[0].line, undefined);
-});
-
 test("reindexDirectory removes stale keys from the directory", async () => {
   const { store } = await makeStore();
   await store.reindexDirectory("src", [

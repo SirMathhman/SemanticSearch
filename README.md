@@ -1,14 +1,12 @@
 # SemanticSearch
 
-An [MCP](https://modelcontextprotocol.io) (Model Context Protocol) server that gives AI agents **semantic search over your code**. It embeds named symbols extracted from TypeScript files (plus any ad-hoc documents you add) with a local sentence-embedding model, and answers natural-language queries with the most relevant declarations — including the **file and line** so an agent can jump straight to the source.
+An [MCP](https://modelcontextprotocol.io) (Model Context Protocol) server that gives AI agents **semantic search over your code**. It embeds named symbols extracted from TypeScript files with a local sentence-embedding model, and answers natural-language queries with the most relevant declarations — including the **file and line** so an agent can jump straight to the source.
 
 Everything runs locally: the embedding model ([`Xenova/all-MiniLM-L6-v2`](https://huggingface.co/Xenova/all-MiniLM-L6-v2), 384-dim ONNX, ~22 MB) runs on CPU via [`@huggingface/transformers`](https://github.com/huggingface/transformers.js). No API keys, no network calls at query time.
 
 ## How it works
 
-- **Corpus** — two sources:
-  - **Configured directories**: at startup the server walks each directory, extracts named top-level declarations (functions, classes, interfaces, type aliases, enums, consts) from `.ts` files, and embeds them. Directories are watched, so edits are re-indexed automatically.
-  - **Ad-hoc documents**: added at runtime with the `add_document` tool.
+- **Corpus** — the configured directories: at startup the server walks each directory, extracts named top-level declarations (functions, classes, interfaces, type aliases, enums, consts) from `.ts` files, and embeds them. Directories are watched, so edits and deletions are re-indexed automatically — the corpus always mirrors what is on disk.
 - **Search** — the query is embedded with the same model and ranked by cosine similarity against the corpus.
 - **Persistence** — the corpus (vectors included) is saved to a JSON file, so restarts don't re-embed unchanged documents.
 
@@ -55,19 +53,18 @@ Set `cwd` to the project you want searched — the config file and corpus live i
 
 ## Tools
 
-| Tool | Description |
-| --- | --- |
+| Tool     | Description                                                                                                                              |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `search` | Semantic search over the corpus. Inputs: `query` (string), `limit` (1–50, default 5). Returns scored results with `file:line` locations. |
-| `add_document` | Embed and store an ad-hoc document. Input: `text` (string). |
 
 ## Development
 
-| Task | Command |
-| --- | --- |
-| Build | `pnpm build` |
-| Test | `pnpm test` |
+| Task                                  | Command         |
+| ------------------------------------- | --------------- |
+| Build                                 | `pnpm build`    |
+| Test                                  | `pnpm test`     |
 | Generate corpus (one-shot, no server) | `pnpm generate` |
-| Run server | `pnpm start` |
+| Run server                            | `pnpm start`    |
 
 `corpus.json` is gitignored and regenerable via `pnpm generate`.
 

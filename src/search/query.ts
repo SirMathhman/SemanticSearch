@@ -27,14 +27,6 @@ export interface DocInput {
 /** A semantic search store over an embedder. */
 export interface Store {
   /**
-   * Embed and store a document.
-   *
-   * @param text - The document text to index.
-   * @returns The id assigned to the new document.
-   */
-  addDocument(text: string): Promise<number>;
-
-  /**
    * Embed and store a document under a stable key, replacing any existing document with that key.
    *
    * @param key - The stable identity for the document.
@@ -164,23 +156,6 @@ async function upsertMany(
 }
 
 /**
- * Build the `addDocument` operation: embed and store a document keyed by the
- * next id.
- *
- * @param ctx - The store context.
- * @returns The addDocument operation.
- */
-function makeAddDocument(ctx: StoreContext) {
-  return (text: string): Promise<number> =>
-    enqueue(ctx, async () => {
-      // Key off the next id without consuming it; upsertMany assigns it.
-      return (
-        await upsertMany(ctx, [{ key: `doc-${ctx.nextIdRef.current}`, text }])
-      )[0];
-    });
-}
-
-/**
  * Build the `upsertDocument` operation: embed and store a document under a
  * stable key.
  *
@@ -276,7 +251,6 @@ export function createStore(
   return {
     ok: true,
     store: {
-      addDocument: makeAddDocument(ctx),
       upsertDocument: makeUpsertDocument(ctx),
       upsertDocuments: makeUpsertDocuments(ctx),
       reindexDirectory: makeReindexDirectory(ctx),

@@ -89,21 +89,6 @@ export async function createServer(): Promise<McpServer> {
     },
   );
 
-  server.registerTool(
-    "add_document",
-    {
-      title: "Add document",
-      description: "Embed and store a document in the corpus.",
-      inputSchema: {
-        text: z.string().describe("The document text to index"),
-      },
-    },
-    async ({ text }) => {
-      const id = await store.addDocument(text);
-      return { content: [{ type: "text", text: `Added document ${id}` }] };
-    },
-  );
-
   return server;
 }
 

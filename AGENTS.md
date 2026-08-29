@@ -1,6 +1,6 @@
 # SemanticSearch — Agent Instructions
 
-An MCP (Model Context Protocol) server exposing semantic search over a corpus of documents. TypeScript (ES2022, NodeNext, ESM), pnpm, Node. The corpus is populated two ways: ad-hoc documents (`add_document`) and configured directories indexed + watched at startup (named symbols extracted from `.ts` files).
+An MCP (Model Context Protocol) server exposing semantic search over a corpus of documents. TypeScript (ES2022, NodeNext, ESM), pnpm, Node. The corpus is the configured directories, indexed + watched at startup (named symbols extracted from `.ts` files); deletions are re-indexed automatically, so the corpus always mirrors what is on disk.
 
 ## Commands
 

@@ -1,3 +1,4 @@
+import { existsSync, rmSync } from "node:fs";
 import { loadConfig } from "../src/search/config.js";
 import { indexDirectories } from "../src/search/corpus.js";
 import { localEmbedder } from "../src/search/local-embedder.js";
@@ -12,6 +13,12 @@ if (!configResult.ok) {
   const e = configResult.error;
   console.error(`Config error at ${e.where}: ${e.why}. ${e.fix}`);
   process.exit(1);
+}
+// A generate is a rebuild: start from an empty corpus so the result mirrors
+// exactly what is on disk, dropping anything (e.g. a stale ad-hoc doc) that
+// no configured directory currently produces.
+if (existsSync(configResult.config.corpusPath)) {
+  rmSync(configResult.config.corpusPath);
 }
 const storeResult = createStore(localEmbedder, {
   filePath: configResult.config.corpusPath,
