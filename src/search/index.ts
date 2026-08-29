@@ -33,6 +33,14 @@ export interface Index {
   upsert(entry: IndexEntry): void;
 
   /**
+   * Remove the entry with the given key.
+   *
+   * @param key - The key of the entry to remove.
+   * @returns True if an entry was removed, false if none matched.
+   */
+  remove(key: string): boolean;
+
+  /**
    * Find the entries most similar to a query vector (cosine similarity).
    *
    * @param queryVector - The (normalized) query vector.
@@ -69,6 +77,13 @@ export function createIndex(): Index {
       } else {
         entries.push(entry);
       }
+    },
+
+    remove(key: string): boolean {
+      const i = entries.findIndex((e) => e.key === key);
+      if (i < 0) return false;
+      entries.splice(i, 1);
+      return true;
     },
 
     search(queryVector: number[], limit: number): SearchResult[] {

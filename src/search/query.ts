@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { Embedder } from "./embedder.js";
 import { createIndex, type SearchResult } from "./index.js";
 import { loadCorpus, saveCorpus } from "./persistence.js";
@@ -38,6 +39,19 @@ export interface Store {
    * @returns The ids of the stored documents, in input order.
    */
   upsertDocuments(docs: { key: string; text: string }[]): Promise<number[]>;
+
+  /**
+   * Re-index a directory: upsert the current symbols and remove any previously
+   * indexed symbols from that directory that no longer exist.
+   *
+   * @param directory - The directory that was indexed (used to scope removals).
+   * @param docs - The current symbol documents for that directory.
+   * @returns The ids of the stored documents, in input order.
+   */
+  reindexDirectory(
+    directory: string,
+    docs: { key: string; text: string }[],
+  ): Promise<number[]>;
 
   /**
    * Find the most similar documents to a query (cosine similarity).
@@ -111,9 +125,35 @@ export function createStore(
       return upsertMany(docs);
     },
 
+    async reindexDirectory(
+      directory: string,
+      docs: { key: string; text: string }[],
+    ): Promise<number[]> {
+      // Drop stale entries: previously indexed keys under this directory
+      // that are no longer present in the fresh extraction.
+      const prefix = normalizeDir(directory);
+      const current = new Set(docs.map((d) => d.key));
+      for (const e of index.entries()) {
+        if (e.key.startsWith(prefix) && !current.has(e.key)) {
+          index.remove(e.key);
+        }
+      }
+      return upsertMany(docs);
+    },
+
     async search(query: string, limit: number): Promise<SearchResult[]> {
       const [q] = await embedder.embed([query]);
       return index.search(q, limit);
     },
   };
+}
+
+/**
+ * Normalize a directory path into a key prefix for scoping removals.
+ *
+ * @param directory - The directory that was indexed.
+ * @returns A forward-slash path with a trailing slash.
+ */
+function normalizeDir(directory: string): string {
+  return directory.split(path.sep).join("/").replace(/\/+$/, "") + "/";
 }

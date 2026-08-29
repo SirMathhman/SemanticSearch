@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 
@@ -48,27 +48,54 @@ export function listTypeScriptFiles(root: string): string[] {
 /**
  * Extract top-level symbol documents from a TypeScript source file.
  *
- * @param relPath - The file path to embed in each document (e.g. "src/parser.ts").
+ * @param label - The file path used in each document's key and text. Use an
+ *   absolute, forward-slash path so keys are globally unique and scopable by directory.
  * @param source - The file's source text.
  * @returns One document per named top-level declaration, or a single whole-file document when none exist.
  */
-export function extractSymbols(relPath: string, source: string): SymbolDoc[] {
-  const sf = ts.createSourceFile(relPath, source, ts.ScriptTarget.Latest, true);
+export function extractSymbols(label: string, source: string): SymbolDoc[] {
+  const sf = ts.createSourceFile(label, source, ts.ScriptTarget.Latest, true);
   const docs: SymbolDoc[] = [];
 
   for (const stmt of sf.statements) {
     for (const { name, node } of topLevelDeclarations(stmt)) {
       docs.push({
-        key: `${relPath}::${name}`,
-        text: `${relPath} — ${name}\n${node.getText()}`,
+        key: `${label}::${name}`,
+        text: `${label} — ${name}\n${node.getText()}`,
       });
     }
   }
 
   if (docs.length === 0) {
-    docs.push({ key: relPath, text: `${relPath}\n${source}` });
+    docs.push({ key: label, text: `${label}\n${source}` });
   }
   return docs;
+}
+
+/**
+ * Extract symbol documents for every TypeScript file under a directory.
+ * Keys use absolute, forward-slash paths so entries are globally unique and
+ * can be scoped to their source directory.
+ *
+ * @param directory - The directory to walk.
+ * @returns All symbol documents, in file order.
+ */
+export function extractDirectory(directory: string): SymbolDoc[] {
+  const files = listTypeScriptFiles(directory);
+  return files.flatMap((rel) => {
+    const label = toKeyPath(path.join(directory, rel));
+    return extractSymbols(label, readFileSync(label, "utf8"));
+  });
+}
+
+/**
+ * Normalize a path to forward slashes for use as a stable key.
+ *
+ * @param p - The path to normalize.
+ * @returns The path with forward slashes.
+ */
+function toKeyPath(p: string): string {
+  return p.split(path.sep).join("/");
 }
 
 /**

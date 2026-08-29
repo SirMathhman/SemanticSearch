@@ -1,10 +1,9 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { extractSymbols, listTypeScriptFiles } from "./search/extract.js";
+import { extractDirectory } from "./search/extract.js";
 import { localEmbedder } from "./search/local-embedder.js";
 import { createStore } from "./search/query.js";
+import { watchDirectory } from "./search/watcher.js";
 
 /** Default corpus file location (override with SEMANTIC_SEARCH_CORPUS). */
 const CORPUS_PATH = process.env.SEMANTIC_SEARCH_CORPUS ?? "corpus.json";
@@ -77,16 +76,17 @@ export function createServer(): McpServer {
       },
     },
     async ({ directory }) => {
-      const files = listTypeScriptFiles(directory);
-      const docs = files.flatMap((rel) =>
-        extractSymbols(rel, readFileSync(path.join(directory, rel), "utf8")),
+      const docs = extractDirectory(directory);
+      await store.reindexDirectory(directory, docs);
+      // Keep the corpus in sync with future edits to this directory.
+      watchDirectory(directory, () =>
+        store.reindexDirectory(directory, extractDirectory(directory)),
       );
-      await store.upsertDocuments(docs);
       return {
         content: [
           {
             type: "text",
-            text: `Indexed ${docs.length} symbols from ${files.length} files under ${directory}.`,
+            text: `Indexed ${docs.length} symbols under ${directory}. Watching for changes.`,
           },
         ],
       };
