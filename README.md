@@ -1,0 +1,76 @@
+# SemanticSearch
+
+An [MCP](https://modelcontextprotocol.io) (Model Context Protocol) server that gives AI agents **semantic search over your code**. It embeds named symbols extracted from TypeScript files (plus any ad-hoc documents you add) with a local sentence-embedding model, and answers natural-language queries with the most relevant declarations — including the **file and line** so an agent can jump straight to the source.
+
+Everything runs locally: the embedding model ([`Xenova/all-MiniLM-L6-v2`](https://huggingface.co/Xenova/all-MiniLM-L6-v2), 384-dim ONNX, ~22 MB) runs on CPU via [`@huggingface/transformers`](https://github.com/huggingface/transformers.js). No API keys, no network calls at query time.
+
+## How it works
+
+- **Corpus** — two sources:
+  - **Configured directories**: at startup the server walks each directory, extracts named top-level declarations (functions, classes, interfaces, type aliases, enums, consts) from `.ts` files, and embeds them. Directories are watched, so edits are re-indexed automatically.
+  - **Ad-hoc documents**: added at runtime with the `add_document` tool.
+- **Search** — the query is embedded with the same model and ranked by cosine similarity against the corpus.
+- **Persistence** — the corpus (vectors included) is saved to a JSON file, so restarts don't re-embed unchanged documents.
+
+## Getting started
+
+Requires Node.js and [pnpm](https://pnpm.io).
+
+```sh
+pnpm install
+pnpm build
+pnpm start          # stdio MCP server
+```
+
+The first run downloads the embedding model into `~/.cache/huggingface/transformers` (Windows: `C:\Users\<you>\.cache\huggingface\transformers`).
+
+On first start the server creates `semantic-search.json` in the working directory with default values. Edit it to point at the directories you want indexed:
+
+```json
+{
+  "corpusPath": "corpus.json",
+  "directories": ["src"]
+}
+```
+
+The server connects immediately and indexes in the background; early searches return whatever is indexed so far.
+
+### Registering with an MCP client
+
+Example for Claude Desktop / any stdio MCP client:
+
+```json
+{
+  "mcpServers": {
+    "semantic-search": {
+      "command": "pnpm",
+      "args": ["start"],
+      "cwd": "/path/to/your/project"
+    }
+  }
+}
+```
+
+Set `cwd` to the project you want searched — the config file and corpus live in that directory.
+
+## Tools
+
+| Tool | Description |
+| --- | --- |
+| `search` | Semantic search over the corpus. Inputs: `query` (string), `limit` (1–50, default 5). Returns scored results with `file:line` locations. |
+| `add_document` | Embed and store an ad-hoc document. Input: `text` (string). |
+
+## Development
+
+| Task | Command |
+| --- | --- |
+| Build | `pnpm build` |
+| Test | `pnpm test` |
+| Generate corpus (one-shot, no server) | `pnpm generate` |
+| Run server | `pnpm start` |
+
+`corpus.json` is gitignored and regenerable via `pnpm generate`.
+
+## Architecture
+
+Strictly one-way, outer → inner: `src/index.ts` → `src/server.ts` → `src/search/*`. The domain layer (`src/search/`) is pure — no MCP SDK, no stdio concerns. See [AGENTS.md](./AGENTS.md) for the conventions and invariants that keep it that way.
