@@ -22,6 +22,15 @@ export interface Store {
   addDocument(text: string): Promise<number>;
 
   /**
+   * Embed and store a document under a stable key, replacing any existing document with that key.
+   *
+   * @param key - The stable identity for the document.
+   * @param text - The document text to index.
+   * @returns The id of the stored document.
+   */
+  upsertDocument(key: string, text: string): Promise<number>;
+
+  /**
    * Find the most similar documents to a query (cosine similarity).
    *
    * @param query - The query text.
@@ -56,13 +65,27 @@ export function createStore(
     nextId = loaded.corpus.nextId;
   }
 
+  async function upsert(
+    key: string,
+    text: string,
+    id: number,
+  ): Promise<number> {
+    const [vector] = await embedder.embed([text]);
+    index.upsert({ key, id, text, vector });
+    if (filePath) saveCorpus(filePath, { nextId, docs: index.entries() });
+    return id;
+  }
+
   return {
     async addDocument(text: string): Promise<number> {
-      const [vector] = await embedder.embed([text]);
       const id = nextId++;
-      index.insert({ id, text, vector });
-      if (filePath) saveCorpus(filePath, { nextId, docs: index.entries() });
-      return id;
+      return upsert(`doc-${id}`, text, id);
+    },
+
+    async upsertDocument(key: string, text: string): Promise<number> {
+      const existing = index.entries().find((e) => e.key === key);
+      const id = existing ? existing.id : nextId++;
+      return upsert(key, text, id);
     },
 
     async search(query: string, limit: number): Promise<SearchResult[]> {

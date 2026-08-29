@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { extractSymbols, listTypeScriptFiles } from "./search/extract.js";
 import { localEmbedder } from "./search/local-embedder.js";
 import { createStore } from "./search/query.js";
 
@@ -58,6 +61,39 @@ export function createServer(): McpServer {
     async ({ text }) => {
       const id = await store.addDocument(text);
       return { content: [{ type: "text", text: `Added document ${id}` }] };
+    },
+  );
+
+  server.registerTool(
+    "index_directory",
+    {
+      title: "Index directory",
+      description:
+        "Extract top-level symbols from every .ts file under a directory and upsert them into the corpus. Re-running is idempotent: symbols are keyed by path and name, so edits replace existing entries instead of duplicating them.",
+      inputSchema: {
+        directory: z
+          .string()
+          .describe("Absolute path to the directory to index"),
+      },
+    },
+    async ({ directory }) => {
+      const files = listTypeScriptFiles(directory);
+      let symbols = 0;
+      for (const rel of files) {
+        const source = readFileSync(path.join(directory, rel), "utf8");
+        for (const doc of extractSymbols(rel, source)) {
+          await store.upsertDocument(doc.key, doc.text);
+          symbols++;
+        }
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Indexed ${symbols} symbols from ${files.length} files under ${directory}.`,
+          },
+        ],
+      };
     },
   );
 

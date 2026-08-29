@@ -18,10 +18,10 @@
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "typescript": "^5.9.3",
     "zod": "^4.5.2"
   },
   "devDependencies": {
-    "@types/node": "^26.4.0",
-    "typescript": "^7.0.2"
+    "@types/node": "^26.4.0"
   }
 }

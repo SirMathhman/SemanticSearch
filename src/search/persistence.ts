@@ -36,11 +36,18 @@ export function loadCorpus(filePath: string): LoadResult {
     return { ok: false, error: `invalid JSON: ${String(err)}` };
   }
 
-  const corpus = parsed as CorpusFile;
-  if (typeof corpus?.nextId !== "number" || !Array.isArray(corpus?.docs)) {
+  const file = parsed as CorpusFile;
+  if (typeof file?.nextId !== "number" || !Array.isArray(file?.docs)) {
     return { ok: false, error: "unexpected corpus shape" };
   }
-  return { ok: true, corpus };
+  // Legacy entries have no key; derive one so upserts stay stable.
+  const docs: IndexEntry[] = file.docs.map((d) => ({
+    key: d.key ?? `doc-${d.id}`,
+    id: d.id,
+    text: d.text,
+    vector: d.vector,
+  }));
+  return { ok: true, corpus: { nextId: file.nextId, docs } };
 }
 
 /**

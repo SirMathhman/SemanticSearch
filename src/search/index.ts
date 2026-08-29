@@ -1,5 +1,7 @@
-/** A stored document: its text plus its embedding. */
+/** A stored document: its identity key, text, and embedding. */
 export interface IndexEntry {
+  /** Stable identity; upserts replace the entry with the same key. */
+  key: string;
   id: number;
   text: string;
   vector: number[];
@@ -21,6 +23,14 @@ export interface Index {
    * @returns Nothing.
    */
   insert(entry: IndexEntry): void;
+
+  /**
+   * Insert or replace the entry with the given key.
+   *
+   * @param entry - The entry to upsert.
+   * @returns Nothing.
+   */
+  upsert(entry: IndexEntry): void;
 
   /**
    * Find the entries most similar to a query vector (cosine similarity).
@@ -50,6 +60,15 @@ export function createIndex(): Index {
   return {
     insert(entry: IndexEntry): void {
       entries.push(entry);
+    },
+
+    upsert(entry: IndexEntry): void {
+      const i = entries.findIndex((e) => e.key === entry.key);
+      if (i >= 0) {
+        entries[i] = entry;
+      } else {
+        entries.push(entry);
+      }
     },
 
     search(queryVector: number[], limit: number): SearchResult[] {
