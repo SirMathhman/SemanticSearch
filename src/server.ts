@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { loadConfig } from "./search/config.js";
@@ -8,6 +9,22 @@ import { type SearchResult } from "./search/index.js";
 import { localEmbedder } from "./search/local-embedder.js";
 import { createStore } from "./search/query.js";
 import { watchDirectory } from "./search/watcher.js";
+
+/**
+ * Read the package version from the manifest.
+ *
+ * `package.json` is always shipped in the tarball and sits at the package
+ * root, one level above this module (both in `dist/` and under `tsx`), so
+ * the version reported to MCP clients can never drift from the published
+ * version.
+ *
+ * @returns The `version` field of the package manifest.
+ */
+function packageVersion(): string {
+  const require = createRequire(import.meta.url);
+  const pkg = require("../package.json") as { version: string };
+  return pkg.version;
+}
 
 /**
  * Build the MCP server with its tools registered.
@@ -60,7 +77,7 @@ export async function createServer(): Promise<McpServer> {
   });
   const server = new McpServer({
     name: "semantic-search",
-    version: "0.1.0",
+    version: packageVersion(),
   });
 
   server.registerTool(
