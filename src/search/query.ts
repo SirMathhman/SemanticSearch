@@ -68,6 +68,147 @@ export type CreateStoreResult =
   | { ok: true; store: Store }
   | { ok: false; error: CorpusError };
 
+/** Shared state for the store operation factories. */
+interface StoreContext {
+  /** The in-memory vector index. */
+  index: ReturnType<typeof createIndex>;
+  /** The embedder used for documents and queries. */
+  embedder: Embedder;
+  /** Path to the persistence file, or undefined for an in-memory store. */
+  filePath?: string;
+  /** Mutable counter for the next document id. */
+  nextIdRef: { current: number };
+}
+
+/**
+ * Embed and upsert many documents under stable keys in a single batch.
+ * Only documents whose text changed are re-embedded; the corpus is saved
+ * once. A failed save is logged to stderr and the in-memory index stays
+ * authoritative until the next save retries.
+ *
+ * @param ctx - The store context.
+ * @param docs - The documents to upsert, each with a stable key and text.
+ * @returns The ids of the stored documents, in input order.
+ */
+async function upsertMany(
+  ctx: StoreContext,
+  docs: { key: string; text: string }[],
+): Promise<number[]> {
+  const { index, embedder, filePath, nextIdRef } = ctx;
+  if (docs.length === 0) return [];
+  const existing = new Map(index.entries().map((e) => [e.key, e]));
+  // Only re-embed documents whose text actually changed; unchanged entries
+  // keep their stored vectors. This makes watcher re-indexes cheap.
+  const changed = docs.filter((d) => {
+    const e = existing.get(d.key);
+    return !e || e.text !== d.text;
+  });
+  const ids = new Map(
+    docs.map((d) => [d.key, existing.get(d.key)?.id ?? nextIdRef.current++]),
+  );
+  if (changed.length > 0) {
+    const vectors = await embedder.embed(changed.map((d) => d.text));
+    changed.forEach((d, i) =>
+      index.upsert({
+        key: d.key,
+        id: ids.get(d.key)!,
+        text: d.text,
+        vector: vectors[i],
+      }),
+    );
+    if (filePath) {
+      const saved = saveCorpus(filePath, {
+        nextId: nextIdRef.current,
+        docs: index.entries(),
+      });
+      if (!saved.ok) {
+        const e = saved.error;
+        console.error(`Corpus save failed at ${e.where}: ${e.why}. ${e.fix}`);
+      }
+    }
+  }
+  return docs.map((d) => ids.get(d.key)!);
+}
+
+/**
+ * Build the `addDocument` operation: embed and store a document keyed by the
+ * next id.
+ *
+ * @param ctx - The store context.
+ * @returns The addDocument operation.
+ */
+function makeAddDocument(ctx: StoreContext) {
+  return async (text: string): Promise<number> => {
+    // Key off the next id without consuming it; upsertMany assigns it.
+    return (
+      await upsertMany(ctx, [{ key: `doc-${ctx.nextIdRef.current}`, text }])
+    )[0];
+  };
+}
+
+/**
+ * Build the `upsertDocument` operation: embed and store a document under a
+ * stable key.
+ *
+ * @param ctx - The store context.
+ * @returns The upsertDocument operation.
+ */
+function makeUpsertDocument(ctx: StoreContext) {
+  return async (key: string, text: string): Promise<number> =>
+    (await upsertMany(ctx, [{ key, text }]))[0];
+}
+
+/**
+ * Build the `upsertDocuments` operation: embed and store many documents under
+ * stable keys in a single batch.
+ *
+ * @param ctx - The store context.
+ * @returns The upsertDocuments operation.
+ */
+function makeUpsertDocuments(ctx: StoreContext) {
+  return (docs: { key: string; text: string }[]): Promise<number[]> =>
+    upsertMany(ctx, docs);
+}
+
+/**
+ * Build the `reindexDirectory` operation: upsert the current symbols and
+ * remove any previously indexed symbols from that directory that no longer
+ * exist.
+ *
+ * @param ctx - The store context.
+ * @returns The reindexDirectory operation.
+ */
+function makeReindexDirectory(ctx: StoreContext) {
+  return async (
+    directory: string,
+    docs: { key: string; text: string }[],
+  ): Promise<number[]> => {
+    // Drop stale entries: previously indexed keys under this directory
+    // that are no longer present in the fresh extraction.
+    const prefix = normalizeDir(directory);
+    const current = new Set(docs.map((d) => d.key));
+    for (const e of ctx.index.entries()) {
+      if (e.key.startsWith(prefix) && !current.has(e.key)) {
+        ctx.index.remove(e.key);
+      }
+    }
+    return upsertMany(ctx, docs);
+  };
+}
+
+/**
+ * Build the `search` operation: find the most similar documents to a query.
+ *
+ * @param ctx - The store context.
+ * @returns The search operation.
+ */
+function makeSearch(ctx: StoreContext) {
+  return async (query: string, limit: number): Promise<SearchResult[]> => {
+    const [q] = await ctx.embedder.embed([query]);
+    return ctx.index.search(q, limit);
+  };
+}
+
 /**
  * Create a semantic search store, optionally persisted to a JSON file.
  *
@@ -82,7 +223,7 @@ export function createStore(
 ): CreateStoreResult {
   const { filePath } = options;
   const index = createIndex();
-  let nextId = 1;
+  const nextIdRef = { current: 1 };
 
   if (filePath) {
     const loaded = loadCorpus(filePath);
@@ -90,85 +231,18 @@ export function createStore(
       return { ok: false, error: loaded.error };
     }
     for (const doc of loaded.corpus.docs) index.insert(doc);
-    nextId = loaded.corpus.nextId;
+    nextIdRef.current = loaded.corpus.nextId;
   }
 
-  async function upsertMany(
-    docs: { key: string; text: string }[],
-  ): Promise<number[]> {
-    if (docs.length === 0) return [];
-    const existing = new Map(index.entries().map((e) => [e.key, e]));
-    // Only re-embed documents whose text actually changed; unchanged entries
-    // keep their stored vectors. This makes watcher re-indexes cheap.
-    const changed = docs.filter((d) => {
-      const e = existing.get(d.key);
-      return !e || e.text !== d.text;
-    });
-    const ids = new Map(
-      docs.map((d) => [d.key, existing.get(d.key)?.id ?? nextId++]),
-    );
-    if (changed.length > 0) {
-      const vectors = await embedder.embed(changed.map((d) => d.text));
-      changed.forEach((d, i) =>
-        index.upsert({
-          key: d.key,
-          id: ids.get(d.key)!,
-          text: d.text,
-          vector: vectors[i],
-        }),
-      );
-      if (filePath) {
-        const saved = saveCorpus(filePath, { nextId, docs: index.entries() });
-        if (!saved.ok) {
-          // The in-memory index stays authoritative for this session; the
-          // next save retries. Surface the failure on stderr (stdout is
-          // reserved for the MCP protocol).
-          const e = saved.error;
-          console.error(`Corpus save failed at ${e.where}: ${e.why}. ${e.fix}`);
-        }
-      }
-    }
-    return docs.map((d) => ids.get(d.key)!);
-  }
-
+  const ctx: StoreContext = { index, embedder, filePath, nextIdRef };
   return {
-    ok: true as const,
+    ok: true,
     store: {
-      async addDocument(text: string): Promise<number> {
-        // Key off the next id without consuming it; upsertMany assigns it.
-        return (await upsertMany([{ key: `doc-${nextId}`, text }]))[0];
-      },
-
-      async upsertDocument(key: string, text: string): Promise<number> {
-        return (await upsertMany([{ key, text }]))[0];
-      },
-
-      async upsertDocuments(
-        docs: { key: string; text: string }[],
-      ): Promise<number[]> {
-        return upsertMany(docs);
-      },
-
-      async reindexDirectory(
-        directory: string,
-        docs: { key: string; text: string }[],
-      ): Promise<number[]> {
-        // Drop stale entries: previously indexed keys under this directory
-        // that are no longer present in the fresh extraction.
-        const prefix = normalizeDir(directory);
-        const current = new Set(docs.map((d) => d.key));
-        for (const e of index.entries()) {
-          if (e.key.startsWith(prefix) && !current.has(e.key)) {
-            index.remove(e.key);
-          }
-        }
-        return upsertMany(docs);
-      },
-
-      async search(query: string, limit: number): Promise<SearchResult[]> {
-        const [q] = await embedder.embed([query]);
-        return index.search(q, limit);
-      },
+      addDocument: makeAddDocument(ctx),
+      upsertDocument: makeUpsertDocument(ctx),
+      upsertDocuments: makeUpsertDocuments(ctx),
+      reindexDirectory: makeReindexDirectory(ctx),
+      search: makeSearch(ctx),
     },
   };
 }
