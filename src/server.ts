@@ -1,20 +1,23 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { loadConfig } from "./search/config.js";
 import { extractDirectory } from "./search/extract.js";
 import { localEmbedder } from "./search/local-embedder.js";
 import { createStore } from "./search/query.js";
 import { watchDirectory } from "./search/watcher.js";
 
-/** Default corpus file location (override with SEMANTIC_SEARCH_CORPUS). */
-const CORPUS_PATH = process.env.SEMANTIC_SEARCH_CORPUS ?? "corpus.json";
-
 /**
  * Build the MCP server with its tools registered.
  *
+ * Loads the server config (creating `semantic-search.json` in the working
+ * directory on first start) and uses its corpus path for persistence.
+ *
  * @returns A configured (not yet connected) MCP server.
+ * @throws When the config file exists but is unreadable or malformed.
  */
 export function createServer(): McpServer {
-  const store = createStore(localEmbedder, { filePath: CORPUS_PATH });
+  const config = loadConfig();
+  const store = createStore(localEmbedder, { filePath: config.corpusPath });
   const server = new McpServer({
     name: "semantic-search",
     version: "0.1.0",

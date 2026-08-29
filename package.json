@@ -5,6 +5,7 @@
   "type": "module",
   "pnpm": {
     "onlyBuiltDependencies": [
+      "esbuild",
       "onnxruntime-node",
       "sharp",
       "protobufjs"
@@ -13,7 +14,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "node --import tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
@@ -22,6 +24,7 @@
     "zod": "^4.5.2"
   },
   "devDependencies": {
-    "@types/node": "^26.4.0"
+    "@types/node": "^26.4.0",
+    "tsx": "^4.23.12"
   }
 }
