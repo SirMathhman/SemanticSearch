@@ -1,2 +1,0 @@
-# Keep compiled test files out of the published tarball.
-dist/**/*.test.js
