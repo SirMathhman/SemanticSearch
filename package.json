@@ -4,6 +4,7 @@
   "description": "MCP server exposing semantic search over a corpus of TypeScript code symbols, embedded locally.",
   "type": "module",
   "license": "MIT",
+  "packageManager": "pnpm@10.28.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/SirMathhman/SemanticSearch.git"
