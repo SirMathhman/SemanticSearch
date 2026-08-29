@@ -3,13 +3,16 @@ import { z } from "zod";
 import { localEmbedder } from "./search/local-embedder.js";
 import { createStore } from "./search/store.js";
 
+/** Default corpus file location (override with SEMANTIC_SEARCH_CORPUS). */
+const CORPUS_PATH = process.env.SEMANTIC_SEARCH_CORPUS ?? "corpus.json";
+
 /**
  * Build the MCP server with its tools registered.
  *
  * @returns A configured (not yet connected) MCP server.
  */
 export function createServer(): McpServer {
-  const store = createStore(localEmbedder);
+  const store = createStore(localEmbedder, { filePath: CORPUS_PATH });
   const server = new McpServer({
     name: "semantic-search",
     version: "0.1.0",
