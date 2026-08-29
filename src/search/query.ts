@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { Embedder } from "./embedder.js";
 import { createIndex, type SearchResult } from "./index.js";
-import { loadCorpus, saveCorpus } from "./persistence.js";
+import { loadCorpus, saveCorpus, type CorpusError } from "./persistence.js";
 
 /** Options for creating a store. */
 export interface StoreOptions {
@@ -66,7 +66,7 @@ export interface Store {
 /** Result of creating a store. */
 export type CreateStoreResult =
   | { ok: true; store: Store }
-  | { ok: false; error: string };
+  | { ok: false; error: CorpusError };
 
 /**
  * Create a semantic search store, optionally persisted to a JSON file.
@@ -87,10 +87,7 @@ export function createStore(
   if (filePath) {
     const loaded = loadCorpus(filePath);
     if (!loaded.ok) {
-      return {
-        ok: false,
-        error: `Cannot load corpus at ${filePath}: ${loaded.error}`,
-      };
+      return { ok: false, error: loaded.error };
     }
     for (const doc of loaded.corpus.docs) index.insert(doc);
     nextId = loaded.corpus.nextId;
@@ -120,7 +117,16 @@ export function createStore(
           vector: vectors[i],
         }),
       );
-      if (filePath) saveCorpus(filePath, { nextId, docs: index.entries() });
+      if (filePath) {
+        const saved = saveCorpus(filePath, { nextId, docs: index.entries() });
+        if (!saved.ok) {
+          // The in-memory index stays authoritative for this session; the
+          // next save retries. Surface the failure on stderr (stdout is
+          // reserved for the MCP protocol).
+          const e = saved.error;
+          console.error(`Corpus save failed at ${e.where}: ${e.why}. ${e.fix}`);
+        }
+      }
     }
     return docs.map((d) => ids.get(d.key)!);
   }

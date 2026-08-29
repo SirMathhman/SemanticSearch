@@ -28,7 +28,8 @@ export function createServer(): McpServer {
     filePath: configResult.config.corpusPath,
   });
   if (!storeResult.ok) {
-    console.error(storeResult.error);
+    const e = storeResult.error;
+    console.error(`Corpus error at ${e.where}: ${e.why}. ${e.fix}`);
     process.exit(1);
   }
   const store = storeResult.store;
