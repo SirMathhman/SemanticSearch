@@ -87,6 +87,28 @@ interface StoreContext {
   filePath?: string;
   /** Mutable counter for the next document id. */
   nextIdRef: { current: number };
+  /**
+   * Tail of the mutation chain. Every mutating operation is enqueued after
+   * this promise so that concurrent mutations (e.g. the background initial
+   * index and a watcher reindex) run strictly one at a time, in issue order.
+   */
+  chain: Promise<unknown>;
+}
+
+/**
+ * Run a mutating operation after all previously enqueued mutations have
+ * completed, preserving issue order. The chain itself never rejects (so one
+ * failed mutation does not wedge later ones); the caller still receives the
+ * operation's own result or error.
+ *
+ * @param ctx - The store context (holds the chain tail).
+ * @param op - The mutation to run once the chain reaches it.
+ * @returns A promise for the operation's result.
+ */
+function enqueue<T>(ctx: StoreContext, op: () => Promise<T>): Promise<T> {
+  const next = ctx.chain.then(op, op);
+  ctx.chain = next.catch(() => {});
+  return next;
 }
 
 /**
@@ -149,12 +171,13 @@ async function upsertMany(
  * @returns The addDocument operation.
  */
 function makeAddDocument(ctx: StoreContext) {
-  return async (text: string): Promise<number> => {
-    // Key off the next id without consuming it; upsertMany assigns it.
-    return (
-      await upsertMany(ctx, [{ key: `doc-${ctx.nextIdRef.current}`, text }])
-    )[0];
-  };
+  return (text: string): Promise<number> =>
+    enqueue(ctx, async () => {
+      // Key off the next id without consuming it; upsertMany assigns it.
+      return (
+        await upsertMany(ctx, [{ key: `doc-${ctx.nextIdRef.current}`, text }])
+      )[0];
+    });
 }
 
 /**
@@ -165,8 +188,8 @@ function makeAddDocument(ctx: StoreContext) {
  * @returns The upsertDocument operation.
  */
 function makeUpsertDocument(ctx: StoreContext) {
-  return async (key: string, text: string): Promise<number> =>
-    (await upsertMany(ctx, [{ key, text }]))[0];
+  return (key: string, text: string): Promise<number> =>
+    enqueue(ctx, async () => (await upsertMany(ctx, [{ key, text }]))[0]);
 }
 
 /**
@@ -177,7 +200,8 @@ function makeUpsertDocument(ctx: StoreContext) {
  * @returns The upsertDocuments operation.
  */
 function makeUpsertDocuments(ctx: StoreContext) {
-  return (docs: DocInput[]): Promise<number[]> => upsertMany(ctx, docs);
+  return (docs: DocInput[]): Promise<number[]> =>
+    enqueue(ctx, () => upsertMany(ctx, docs));
 }
 
 /**
@@ -189,18 +213,19 @@ function makeUpsertDocuments(ctx: StoreContext) {
  * @returns The reindexDirectory operation.
  */
 function makeReindexDirectory(ctx: StoreContext) {
-  return async (directory: string, docs: DocInput[]): Promise<number[]> => {
-    // Drop stale entries: previously indexed keys under this directory
-    // that are no longer present in the fresh extraction.
-    const prefix = normalizeDir(directory);
-    const current = new Set(docs.map((d) => d.key));
-    for (const e of ctx.index.entries()) {
-      if (e.key.startsWith(prefix) && !current.has(e.key)) {
-        ctx.index.remove(e.key);
+  return (directory: string, docs: DocInput[]): Promise<number[]> =>
+    enqueue(ctx, async () => {
+      // Drop stale entries: previously indexed keys under this directory
+      // that are no longer present in the fresh extraction.
+      const prefix = normalizeDir(directory);
+      const current = new Set(docs.map((d) => d.key));
+      for (const e of ctx.index.entries()) {
+        if (e.key.startsWith(prefix) && !current.has(e.key)) {
+          ctx.index.remove(e.key);
+        }
       }
-    }
-    return upsertMany(ctx, docs);
-  };
+      return upsertMany(ctx, docs);
+    });
 }
 
 /**
@@ -241,7 +266,13 @@ export function createStore(
     nextIdRef.current = loaded.corpus.nextId;
   }
 
-  const ctx: StoreContext = { index, embedder, filePath, nextIdRef };
+  const ctx: StoreContext = {
+    index,
+    embedder,
+    filePath,
+    nextIdRef,
+    chain: Promise.resolve(),
+  };
   return {
     ok: true,
     store: {
