@@ -14,8 +14,9 @@ import { watchDirectory } from "./search/watcher.js";
  *
  * Loads the server config (creating `semantic-search.json` in the working
  * directory on first start) and uses its corpus path for persistence.
- * Each configured directory is indexed and watched at startup; a directory
- * that does not exist is skipped with a warning on stderr.
+ * Each existing configured directory is watched at startup, and the initial
+ * index runs in the background so the transport can connect immediately; a
+ * directory that does not exist is skipped with a warning on stderr.
  * This is the single place that turns a failed config or corpus load into
  * a process-level failure: the structured error is logged to stderr and the
  * process exits with a non-zero code.
@@ -38,7 +39,10 @@ export async function createServer(): Promise<McpServer> {
     process.exit(1);
   }
   const store = storeResult.store;
-  await indexDirectories(configResult.config, store);
+  // Start watching each existing directory immediately so the server is
+  // responsive, then run the initial index in the background. A cold start
+  // (no corpus.json) therefore does not block the transport from connecting;
+  // early searches simply return whatever has been indexed so far.
   for (const directory of configResult.config.directories) {
     if (!existsSync(directory)) continue;
     watchDirectory(directory, () => {
@@ -51,6 +55,9 @@ export async function createServer(): Promise<McpServer> {
       }
     });
   }
+  void indexDirectories(configResult.config, store).catch((err: unknown) => {
+    console.error(`Background indexing failed: ${String(err)}`);
+  });
   const server = new McpServer({
     name: "semantic-search",
     version: "0.1.0",
