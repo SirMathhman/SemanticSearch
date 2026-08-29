@@ -1,0 +1,7 @@
+{
+  "chat.mcp.serverSampling": {
+    "SemanticSearch/.vscode/mcp.json: semantic-search": {
+      "allowedModels": ["copilotcli/auto", "copilot/auto"]
+    }
+  }
+}

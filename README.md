@@ -12,6 +12,16 @@ Everything runs locally: the embedding model ([`Xenova/all-MiniLM-L6-v2`](https:
 
 ## Getting started
 
+### From npm (recommended)
+
+Requires Node.js ≥ 20. The package ships a `semantic-search` bin:
+
+```sh
+npx -y @sirmathhman/semantic-search   # stdio MCP server
+```
+
+### From source
+
 Requires Node.js and [pnpm](https://pnpm.io).
 
 ```sh
@@ -67,6 +77,17 @@ Set `cwd` to the project you want searched — the config file and corpus live i
 | Run server                            | `pnpm start`    |
 
 `corpus.json` is gitignored and regenerable via `pnpm generate`.
+
+## Publishing
+
+Releases are published to npm as `@sirmathhman/semantic-search` by a GitHub Actions workflow (`.github/workflows/publish.yml`) that runs on `v*` tags: install → test → build → `npm publish --provenance`.
+
+One-time setup: create an npm **Automation** token (read-only publish access to the `@sirmathhman` scope) and store it in the repo's `NPM_TOKEN` secret. Then:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
 
 ## Architecture
 

@@ -1,8 +1,23 @@
 {
-  "name": "semantic-search",
+  "name": "@sirmathhman/semantic-search",
   "version": "0.1.0",
-  "private": true,
+  "description": "MCP server exposing semantic search over a corpus of TypeScript code symbols, embedded locally.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SirMathhman/SemanticSearch.git"
+  },
+  "bin": {
+    "semantic-search": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
