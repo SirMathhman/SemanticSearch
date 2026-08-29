@@ -1,6 +1,6 @@
 {
   "name": "@sirmathhman/semantic-search",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server exposing semantic search over a corpus of TypeScript code symbols, embedded locally.",
   "type": "module",
   "license": "MIT",
