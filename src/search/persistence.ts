@@ -87,12 +87,18 @@ export function loadCorpus(filePath: string): LoadResult {
     };
   }
   // Legacy entries have no key; derive one so upserts stay stable.
-  const docs: IndexEntry[] = file.docs.map((d) => ({
-    key: d.key ?? `doc-${d.id}`,
-    id: d.id,
-    text: d.text,
-    vector: d.vector,
-  }));
+  // file/line are attached only when present, so legacy entries stay clean.
+  const docs: IndexEntry[] = file.docs.map((d) => {
+    const entry: IndexEntry = {
+      key: d.key ?? `doc-${d.id}`,
+      id: d.id,
+      text: d.text,
+      vector: d.vector,
+    };
+    if (d.file !== undefined) entry.file = d.file;
+    if (d.line !== undefined) entry.line = d.line;
+    return entry;
+  });
   return { ok: true, corpus: { nextId: file.nextId, docs } };
 }
 

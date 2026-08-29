@@ -8,6 +8,10 @@ export interface SymbolDoc {
   key: string;
   /** The text to embed: a path header plus the declaration source. */
   text: string;
+  /** The source file the symbol came from. */
+  file: string;
+  /** 1-based line of the declaration in `file`. */
+  line: number;
 }
 
 /** A named top-level declaration and its source node. */
@@ -69,15 +73,23 @@ export function extractSymbols(label: string, source: string): SymbolDoc[] {
 
   for (const stmt of sf.statements) {
     for (const { name, node } of topLevelDeclarations(stmt)) {
+      const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
       docs.push({
         key: `${label}::${name}`,
         text: `${label} — ${name}\n${node.getText()}`,
+        file: label,
+        line,
       });
     }
   }
 
   if (docs.length === 0) {
-    docs.push({ key: label, text: `${label}\n${source}` });
+    docs.push({
+      key: label,
+      text: `${label}\n${source}`,
+      file: label,
+      line: 1,
+    });
   }
   return docs;
 }

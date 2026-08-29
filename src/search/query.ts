@@ -12,6 +12,18 @@ export interface StoreOptions {
   filePath?: string;
 }
 
+/** A document to upsert into the store. */
+export interface DocInput {
+  /** Stable identity for the document. */
+  key: string;
+  /** The text to embed. */
+  text: string;
+  /** Source file the document came from, when known. */
+  file?: string;
+  /** 1-based line of the declaration in `file`, when known. */
+  line?: number;
+}
+
 /** A semantic search store over an embedder. */
 export interface Store {
   /**
@@ -38,7 +50,7 @@ export interface Store {
    * @param docs - The documents to upsert, each with a stable key and text.
    * @returns The ids of the stored documents, in input order.
    */
-  upsertDocuments(docs: { key: string; text: string }[]): Promise<number[]>;
+  upsertDocuments(docs: DocInput[]): Promise<number[]>;
 
   /**
    * Re-index a directory: upsert the current symbols and remove any previously
@@ -48,10 +60,7 @@ export interface Store {
    * @param docs - The current symbol documents for that directory.
    * @returns The ids of the stored documents, in input order.
    */
-  reindexDirectory(
-    directory: string,
-    docs: { key: string; text: string }[],
-  ): Promise<number[]>;
+  reindexDirectory(directory: string, docs: DocInput[]): Promise<number[]>;
 
   /**
    * Find the most similar documents to a query (cosine similarity).
@@ -92,7 +101,7 @@ interface StoreContext {
  */
 async function upsertMany(
   ctx: StoreContext,
-  docs: { key: string; text: string }[],
+  docs: DocInput[],
 ): Promise<number[]> {
   const { index, embedder, filePath, nextIdRef } = ctx;
   if (docs.length === 0) return [];
@@ -114,6 +123,8 @@ async function upsertMany(
         id: ids.get(d.key)!,
         text: d.text,
         vector: vectors[i],
+        file: d.file,
+        line: d.line,
       }),
     );
     if (filePath) {
@@ -166,8 +177,7 @@ function makeUpsertDocument(ctx: StoreContext) {
  * @returns The upsertDocuments operation.
  */
 function makeUpsertDocuments(ctx: StoreContext) {
-  return (docs: { key: string; text: string }[]): Promise<number[]> =>
-    upsertMany(ctx, docs);
+  return (docs: DocInput[]): Promise<number[]> => upsertMany(ctx, docs);
 }
 
 /**
@@ -179,10 +189,7 @@ function makeUpsertDocuments(ctx: StoreContext) {
  * @returns The reindexDirectory operation.
  */
 function makeReindexDirectory(ctx: StoreContext) {
-  return async (
-    directory: string,
-    docs: { key: string; text: string }[],
-  ): Promise<number[]> => {
+  return async (directory: string, docs: DocInput[]): Promise<number[]> => {
     // Drop stale entries: previously indexed keys under this directory
     // that are no longer present in the fresh extraction.
     const prefix = normalizeDir(directory);

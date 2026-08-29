@@ -5,6 +5,10 @@ export interface IndexEntry {
   id: number;
   text: string;
   vector: number[];
+  /** Source file the document came from, when known. */
+  file?: string;
+  /** 1-based line of the declaration in `file`, when known. */
+  line?: number;
 }
 
 /** A search hit: document id, text, and cosine similarity score. */
@@ -12,6 +16,10 @@ export interface SearchResult {
   id: number;
   text: string;
   score: number;
+  /** Source file the document came from, when known. */
+  file?: string;
+  /** 1-based line of the declaration in `file`, when known. */
+  line?: number;
 }
 
 /** A pure in-memory vector index (no I/O, no embedder). */
@@ -92,6 +100,8 @@ export function createIndex(): Index {
           id: e.id,
           text: e.text,
           score: dot(queryVector, e.vector),
+          file: e.file,
+          line: e.line,
         }))
         .sort((a, b) => b.score - a.score)
         .slice(0, limit);

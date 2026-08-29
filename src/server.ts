@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { loadConfig } from "./search/config.js";
 import { extractDirectory, type ExtractError } from "./search/extract.js";
+import { type SearchResult } from "./search/index.js";
 import { localEmbedder } from "./search/local-embedder.js";
 import { createStore, type Store } from "./search/query.js";
 import { watchDirectory } from "./search/watcher.js";
@@ -73,9 +74,7 @@ export async function createServer(): Promise<McpServer> {
       const text =
         results.length === 0
           ? "No documents in the corpus yet."
-          : results
-              .map((r) => `[${r.score.toFixed(3)}] (id ${r.id}) ${r.text}`)
-              .join("\n");
+          : results.map(formatResult).join("\n");
       return { content: [{ type: "text", text }] };
     },
   );
@@ -129,4 +128,16 @@ async function indexAndWatch(
     }
   });
   return { ok: true, count: extracted.docs.length };
+}
+
+/**
+ * Format a single search result as a line for the search tool output.
+ *
+ * @param r - The search result to format.
+ * @returns A line like `[0.812] (id 3) src/foo.ts:10 — name\n<text>`,
+ *   with the `file:line` location included when the result carries one.
+ */
+function formatResult(r: SearchResult): string {
+  const loc = r.file ? ` ${r.file}${r.line ? `:${r.line}` : ""}` : "";
+  return `[${r.score.toFixed(3)}] (id ${r.id})${loc}\n${r.text}`;
 }
