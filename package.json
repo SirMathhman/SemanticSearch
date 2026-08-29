@@ -15,7 +15,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
-    "test": "node --import tsx --test src/**/*.test.ts"
+    "test": "node --import tsx --test src/**/*.test.ts",
+    "generate": "node --import tsx scripts/generate-corpus.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
