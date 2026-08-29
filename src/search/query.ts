@@ -31,6 +31,15 @@ export interface Store {
   upsertDocument(key: string, text: string): Promise<number>;
 
   /**
+   * Embed and store many documents under stable keys in a single batch.
+   * All texts are embedded in one call and the corpus is saved once.
+   *
+   * @param docs - The documents to upsert, each with a stable key and text.
+   * @returns The ids of the stored documents, in input order.
+   */
+  upsertDocuments(docs: { key: string; text: string }[]): Promise<number[]>;
+
+  /**
    * Find the most similar documents to a query (cosine similarity).
    *
    * @param query - The query text.
@@ -65,27 +74,41 @@ export function createStore(
     nextId = loaded.corpus.nextId;
   }
 
-  async function upsert(
-    key: string,
-    text: string,
-    id: number,
-  ): Promise<number> {
-    const [vector] = await embedder.embed([text]);
-    index.upsert({ key, id, text, vector });
+  async function upsertMany(
+    docs: { key: string; text: string }[],
+  ): Promise<number[]> {
+    if (docs.length === 0) return [];
+    const ids = docs.map((d) => {
+      const existing = index.entries().find((e) => e.key === d.key);
+      return existing ? existing.id : nextId++;
+    });
+    const vectors = await embedder.embed(docs.map((d) => d.text));
+    docs.forEach((d, i) =>
+      index.upsert({
+        key: d.key,
+        id: ids[i],
+        text: d.text,
+        vector: vectors[i],
+      }),
+    );
     if (filePath) saveCorpus(filePath, { nextId, docs: index.entries() });
-    return id;
+    return ids;
   }
 
   return {
     async addDocument(text: string): Promise<number> {
-      const id = nextId++;
-      return upsert(`doc-${id}`, text, id);
+      // Key off the next id without consuming it; upsertMany assigns it.
+      return (await upsertMany([{ key: `doc-${nextId}`, text }]))[0];
     },
 
     async upsertDocument(key: string, text: string): Promise<number> {
-      const existing = index.entries().find((e) => e.key === key);
-      const id = existing ? existing.id : nextId++;
-      return upsert(key, text, id);
+      return (await upsertMany([{ key, text }]))[0];
+    },
+
+    async upsertDocuments(
+      docs: { key: string; text: string }[],
+    ): Promise<number[]> {
+      return upsertMany(docs);
     },
 
     async search(query: string, limit: number): Promise<SearchResult[]> {

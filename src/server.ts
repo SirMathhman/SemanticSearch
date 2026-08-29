@@ -78,19 +78,15 @@ export function createServer(): McpServer {
     },
     async ({ directory }) => {
       const files = listTypeScriptFiles(directory);
-      let symbols = 0;
-      for (const rel of files) {
-        const source = readFileSync(path.join(directory, rel), "utf8");
-        for (const doc of extractSymbols(rel, source)) {
-          await store.upsertDocument(doc.key, doc.text);
-          symbols++;
-        }
-      }
+      const docs = files.flatMap((rel) =>
+        extractSymbols(rel, readFileSync(path.join(directory, rel), "utf8")),
+      );
+      await store.upsertDocuments(docs);
       return {
         content: [
           {
             type: "text",
-            text: `Indexed ${symbols} symbols from ${files.length} files under ${directory}.`,
+            text: `Indexed ${docs.length} symbols from ${files.length} files under ${directory}.`,
           },
         ],
       };
